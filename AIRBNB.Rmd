@@ -1,0 +1,179 @@
+---
+title: "Abriendo y Explorando un Dataset"
+author: "Federico Poore y Andres Vecchio"
+date: "3/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# deshabilitamos notacion cientifica
+options(scipen = 20)
+
+```
+
+### Analisis de datos de AirBnb
+
+En este proyecto nos propondremos cargar un dataset, mostrar los nombres de sus columnas, indicar sus dimenciones y ofrecer un resumen de su contenido. Utilizaremos la base de AIRBNB del 2019.
+
+```{r}
+AirBnbDataset = read.csv("airbnb_CABA_04_2019.csv",encoding="UTF-8")
+```
+
+Con el comando read.csv hemos cargado el dataset con los alojamientos publicados en airbnb.com para la Ciudad Autónoma de Buenos Aires para abril de 2019.
+
+```{r}
+names(AirBnbDataset)
+```
+
+Con este otro comando names lo que hicimos fue mostrar los nombres de sus columnas.
+
+```{r}
+dim(AirBnbDataset)
+```
+
+El comando dim genera la cantidad de registros. Ahora sabemos que el dataframe que cargamos contiene 18.708 observaciones en 106 variables o, lo que es lo mismo, que tiene 18.708 filas y 106 columnas.
+
+```{r}
+summary(AirBnbDataset)
+```
+
+Finalmente, el comando summary nos permite generar un resumen del contenido del dataset. Es así que nos enteramos, por ejemplo, que la mayor parte de los alojamientos (5.639) se ubica en el barrio de Palermo, seguido por Recoleta (3.022), San Nicolás (1.031), Retiro (934) y Balvanera (879). También nos enteramos de que 8.399 alojamientos ofrecen reglas flexibles de cancelación, contra 5.452 con políticas estrictas y 4.852 con reglas moderadas (las políticas “super estrictas” son marginales: apenas 5 casos). O que el mínimo de noches exigido por los hosts es de 5.8 en promedio, con una mediana de 3.
+
+
+```{r warning=FALSE}
+library(ggplot2)
+
+
+p1 = ggplot() + geom_point(aes(x = monthly_price
+, y = neighbourhood, color= neighbourhood), data = AirBnbDataset) + scale_x_discrete(breaks = seq(50000)) + theme(text=element_text(size=7)) +   theme(legend.position = "botto") + xlim(0, 200000)
+
+p1 + labs(title = "Puntos de Precio por Barrio", y = "Barrios", x = "Precios Mensuales",caption = "Data:AirBnbDataset")
+
+
+```
+
+A modo de de prueba creamos un grafico con las variables monthly_price y neighbourhood para ver la relacion que existe entre ambas. Podemos ver como los barrios de Palermo, Recoleta y San Telmo presentan los valores mensuales mas altos.Como vimos en el summary la media de ingreso mensual ronda los 40000 pesos.
+Para realizar este grafico tuvimos que aprender un monton de elementos, entre ellos como configurar las escalas y sus distancias, como darle color al grafico, configurar el tamaño de las letras y definir las distintas variables en x e y junto con sus caracteristicas.
+
+
+### Poniendo los datos en forma
+
+```{r}
+
+library(tidyverse)
+
+
+```
+
+
+Para poder trabajar mejor con estos datos vamos a seleccionar y ordenar las columnas de manera de trabajar solo con Barrio, Precio Mensual y Precio por dia y fecha desde que hospeda.
+
+```{r}
+Datos_orden = select(AirBnbDataset, neighbourhood,monthly_price, price, host_since)
+
+```
+
+Para asegurarnos de no tener ningun incoveniente vamos a filter los campos que no esten vacios para tener las tablas mas ordenadas. A su vez trabajaremos con los barrios de Palermo, Recoleta y San Telmo. Vamos a filtarlos segun hace cuanto tiempo hace hopedaje y vamos a filtrar a partir del año 2015.
+
+
+```{r}
+Barrios = c("Palermo","San Telmo","Recoleta")
+
+library(lubridate)
+
+
+Datos_Filtado = filter(Datos_orden,monthly_price != "",price != "",neighbourhood %in% Barrios, as.Date(host_since, format = "%d/%m/%Y") >= as.Date ("2/1/2015", format = "%d/%m/%Y"))
+
+
+Datos_Filtado
+
+
+```
+
+Ahora ordenaremos la base de datos precio mensual de mayor a menor 
+
+
+```{r}
+Datos_Ordenados2 = arrange(Datos_Filtado,desc(monthly_price))
+Datos_Ordenados2
+```
+
+
+Queremos saber en que comuna se encuentro cada barrio, para eso utilizaremos la informacion que tiene el dataframe de barrio y comuna. Para poder unir las bases de datos primero modificamos el titulo de la columna neighbourhood por BARRIO para poder trabajar con el mismo nombre en ambas columnas. Como la tabla de barrio y comunas tiene los barrio en mayuscula vamos a pasar las filas de la columna BARRIO a mayuscula para que r pueda hacer match en las variables. Una vez realizado esto hacemos un left join para incorporar la comuna en una nueva base de datos llamada Datos_Ordenados3
+
+
+```{r}
+barrios_comunas = read.csv("http://bitsandbricks.github.io/data/barrios_comunas.csv")
+
+barrios_comunas
+
+Datos_Ordenados22= Datos_Ordenados2%>%
+  rename(BARRIO = neighbourhood)
+
+
+
+Datos_Ordenados3= mutate(Datos_Ordenados22,BARRIO = toupper(BARRIO))
+
+
+Datos_Ordenados3 = left_join(Datos_Ordenados3,barrios_comunas)
+
+Datos_Ordenados3
+
+
+```
+
+A la base de datos le vamos a incorporar una columna con la fecha 01/01/2017 para luego podes sacar la diferencia entre el dia que comenzaron a hospendar hasta la fecha. Para poder calcular la diferencia entre el precio por mes contra cuanto costaria un mes si se pagara el precio por dia vamos a eliminar el signo pesos del precio para poder trabajarlo mejor. Para obtener la diferencia restamos la fecha de hoy que sumamos al dataset con la fecha desde que hospeda.
+
+```{r}
+
+Base = mutate(Datos_Ordenados3, Fecha_Hoy = as.Date ("01/01/2017", format = "%d/%m/%Y"), PrecioSFormato = gsub("\\$", "", Datos_Ordenados3$price), Diferencia = as.Date(Fecha_Hoy, format="%d/%m/%Y") - as.Date(Datos_Ordenados3$host_since, format="%d/%m/%Y"))
+
+          
+```
+
+Eliminamos la palabra days de la diferencia de dias para poder verlo de manera mas clara.
+
+Creamos una nueva columna en donde vemos el PrecioxMesReal que muestra cuando es el costo por mes si se pagara el precio por dia. Creamos la variable AhorroxMes para ver la diferencia. Como podemos ver rapidamente, algunos datos no tiene mucho logica ya sea porque en realidad no utilizan el costo mensual o porque los datos estan mal cargados.
+
+A su vez calculamos cuantos ingresos tendrian las personas si habrian tenido la posibilidad de tenerlo alquilado todos los dias desde que pusieron su lugar en hospedaje.
+
+
+
+```{r}
+
+library(stringr)
+
+
+Base = mutate(Base, Diferencia = as.integer(str_extract(Diferencia, "[0-9]+")))
+
+
+
+Base2 = mutate(Base, PrecioxMesReal = (as.numeric(gsub("\\,", "", Base$PrecioSFormato)) * 30), AhorroxMes = monthly_price - PrecioxMesReal, IngresoTotales = as.numeric(gsub("\\,", "", Base$PrecioSFormato)) * Diferencia) %>% 
+  select(BARRIO,COMUNA,PrecioSFormato,monthly_price,PrecioxMesReal,AhorroxMes,Fecha_Hoy,host_since,Fecha_Hoy,Diferencia,IngresoTotales)%>%
+  arrange(desc(IngresoTotales))
+  
+
+Base2
+
+
+```
+
+
+Como resumen, con la funcion group by la funcion summarise podemos obtener los Ingresos Totales Promedio Por Barrio desde que iniciaron a hospedar (aunque se entiende que no son comparables). Podemos ver como Palermo es el barrio que genera mas ingresos, seguido por Recoleta y por ultimo San Telmo
+
+
+```{r}
+
+Resumen = group_by(Base2, BARRIO)
+
+ResumenFinal =summarise(Resumen,IngresosTotalesPromBarrio  = mean (IngresoTotales))
+
+ResumenFinal
+
+
+
+
+```
+
